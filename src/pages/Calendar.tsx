@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -7,56 +7,116 @@ import { EventInput, DateSelectArg, EventClickArg } from "@fullcalendar/core";
 import { Modal } from "../components/ui/modal";
 import { useModal } from "../hooks/useModal";
 import PageMeta from "../components/common/PageMeta";
+import { interviewService } from "../services/interviewService";
+import { jobService } from "../services/JobService";
+import { Job } from "../../types/Job";
+import { Cv } from "../../types/Cv";
+import DatePicker from "../components/form/date-picker";
 
 interface CalendarEvent extends EventInput {
   extendedProps: {
+    eventType: "interview" | "jobOffer";
     calendar: string;
+    jobId: number;
+    jobTitle: string;
+    cvId?: number;
+    candidateEmail?: string;
   };
 }
 
+
+
+const calendarsEvents = {
+  Danger: "Canceled",
+  Success: "Completer",
+  Primary: "Pending",
+};
+
 const Calendar: React.FC = () => {
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
-    null
-  );
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [jobOffers, setJobOffers] = useState<Job[]>([]);
+  const [candidatesForJob, setCandidatesForJob] = useState<Cv[]>([]);
+
+  const [selectedJobIdFilter, setSelectedJobIdFilter] = useState<number | null>(null);
+
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  // Modal fields for adding/editing interview
   const [eventTitle, setEventTitle] = useState("");
   const [eventStartDate, setEventStartDate] = useState("");
   const [eventEndDate, setEventEndDate] = useState("");
   const [eventLevel, setEventLevel] = useState("");
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+
+  const [selectedJobForInterview, setSelectedJobForInterview] = useState<number | "">("");
+  const [selectedCandidate, setSelectedCandidate] = useState<number | "">("");
+
   const calendarRef = useRef<FullCalendar>(null);
   const { isOpen, openModal, closeModal } = useModal();
 
-  const calendarsEvents = {
-    Danger: "danger",
-    Success: "success",
-    Primary: "primary",
-    Warning: "warning",
-  };
+  // تحميل بيانات عروض العمل و المقابلات
+  useEffect(() => {
+    // جلب عروض العمل
+    jobService.getAll()
+      .then(data => {
+        setJobOffers(data);
+      })
+      .catch(console.error);
+
+    // جلب المقابلات
+    Promise.all([interviewService.getAllInterviews()])
+      .then(([interviewsData]) => {
+        const interviewEvents: CalendarEvent[] = interviewsData.map((interview) => ({
+          id: `interview-${interview.id}`,
+          title: ` (${interview.jobTitle})`,
+          start: interview.start,
+          end: interview.end,
+          extendedProps: {
+            eventType: "interview",
+            calendar: interview.calendar || "Success",
+            jobId: interview.jobId,
+            jobTitle: interview.jobTitle,
+            cvId: interview.cvId,
+            candidateEmail: interview.candidateEmail,
+          },
+        }));
+        setEvents(interviewEvents); 
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
-    // Initialize with some events
-    setEvents([
-      {
-        id: "1",
-        title: "Event Conf.",
-        start: new Date().toISOString().split("T")[0],
-        extendedProps: { calendar: "Danger" },
-      },
-      {
-        id: "2",
-        title: "Meeting",
-        start: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Success" },
-      },
-      {
-        id: "3",
-        title: "Workshop",
-        start: new Date(Date.now() + 172800000).toISOString().split("T")[0],
-        end: new Date(Date.now() + 259200000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Primary" },
-      },
-    ]);
-  }, []);
+    if (jobOffers.length === 0) return;
+
+ const jobOfferEvents: CalendarEvent[] = jobOffers.map((job) => ({
+  id: `jobOffer-${job.id}`,
+  title: `Job Offer: ${job.title}`,
+  start: job.datePublication || "", // 
+  end: job.dateExpiration || "",
+  extendedProps: {
+    eventType: "jobOffer",
+    calendar: "Primary",
+    jobId: job.id ?? 0,        
+    jobTitle: job.title,
+  },
+}));
+
+
+    setEvents((prevEvents) => {
+      const existingJobOfferIds = new Set(prevEvents.filter(e => e.extendedProps.eventType === "jobOffer").map(e => e.id));
+      const newJobOffersToAdd = jobOfferEvents.filter(e => !existingJobOfferIds.has(e.id));
+      return [...prevEvents, ...newJobOffersToAdd];
+    });
+  }, [jobOffers]);
+
+  useEffect(() => {
+    if (selectedJobForInterview) {
+      interviewService.getCandidatesByJob(selectedJobForInterview)
+        .catch(console.error);
+    } else {
+      setCandidatesForJob([]);
+      setSelectedCandidate("");
+    }
+  }, [selectedJobForInterview]);
 
   const handleDateSelect = (selectInfo: DateSelectArg) => {
     resetModalFields();
@@ -66,46 +126,84 @@ const Calendar: React.FC = () => {
   };
 
   const handleEventClick = (clickInfo: EventClickArg) => {
-    const event = clickInfo.event;
-    setSelectedEvent(event as unknown as CalendarEvent);
-    setEventTitle(event.title);
-    setEventStartDate(event.start?.toISOString().split("T")[0] || "");
-    setEventEndDate(event.end?.toISOString().split("T")[0] || "");
+    const event = clickInfo.event as unknown as CalendarEvent;
+    setSelectedEvent(event);
+    setEventTitle(event.title || "");
+  setEventStartDate(event.start?.toString() || "");
+setEventEndDate(event.end?.toString() || "");
+
     setEventLevel(event.extendedProps.calendar);
+    if (event.extendedProps.eventType === "interview") {
+      setSelectedJobForInterview(event.extendedProps.jobId);
+      setSelectedCandidate(event.extendedProps.cvId || "");
+    } else {
+      setSelectedJobForInterview("");
+      setSelectedCandidate("");
+    }
     openModal();
   };
+const handleAddOrUpdateEvent = () => {
+  const now = new Date();
+  const selectedStart = new Date(eventStartDate);
 
-  const handleAddOrUpdateEvent = () => {
-    if (selectedEvent) {
-      // Update existing event
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === selectedEvent.id
-            ? {
-                ...event,
-                title: eventTitle,
-                start: eventStartDate,
-                end: eventEndDate,
-                extendedProps: { calendar: eventLevel },
-              }
-            : event
-        )
-      );
-    } else {
-      // Add new event
-      const newEvent: CalendarEvent = {
-        id: Date.now().toString(),
-        title: eventTitle,
-        start: eventStartDate,
-        end: eventEndDate,
-        allDay: true,
-        extendedProps: { calendar: eventLevel },
-      };
-      setEvents((prevEvents) => [...prevEvents, newEvent]);
-    }
+  if (selectedStart < now) {
+    alert("⚠️ La date sélectionnée doit être supérieure à la date d'aujourd'hui.");
+    return;
+  }
+
+  if (selectedEvent && selectedEvent.extendedProps.eventType === "interview") {
+    setEvents((prevEvents) =>
+      prevEvents.map((event) =>
+        event.id === selectedEvent.id
+          ? {
+              ...event,
+              start: eventStartDate,
+              extendedProps: {
+                ...event.extendedProps,
+                calendar: eventLevel,
+              },
+            }
+          : event
+      )
+    );
     closeModal();
     resetModalFields();
-  };
+  } else {
+    const newInterviewPayload = {
+      candidateId: selectedCandidate,
+      jobId: selectedJobForInterview,
+      start: eventStartDate,
+      end: eventEndDate,
+      calendar: eventLevel,
+      title: eventTitle,
+    };
+
+    interviewService.createInterview(newInterviewPayload)
+      .then((createdInterview) => {
+        setEvents((prev) => [
+          ...prev,
+          {
+            id: `interview-${createdInterview.id}`,
+            title: `Interview: (${createdInterview.jobTitle})`,
+            start: createdInterview.start,
+            end: createdInterview.end,
+            extendedProps: {
+              eventType: "interview",
+              calendar: createdInterview.calendar || "Success",
+              jobId: createdInterview.jobId,
+              jobTitle: createdInterview.jobTitle,
+              cvId: createdInterview.cvId,
+              candidateEmail: createdInterview.candidateEmail,
+            },
+          },
+        ]);
+        closeModal();
+        resetModalFields();
+      })
+      .catch((error) => alert("Failed to save interview: " + error.message));
+  }
+};
+
 
   const resetModalFields = () => {
     setEventTitle("");
@@ -113,157 +211,112 @@ const Calendar: React.FC = () => {
     setEventEndDate("");
     setEventLevel("");
     setSelectedEvent(null);
+    setSelectedJobForInterview("");
+    setCandidatesForJob([]);
+    setSelectedCandidate("");
   };
 
   return (
     <>
-      <PageMeta
-        title="React.js Calendar Dashboard | TailAdmin - Next.js Admin Dashboard Template"
-        description="This is React.js Calendar Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
-      />
-      <div className="rounded-2xl border  border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="custom-calendar">
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            headerToolbar={{
-              left: "prev,next addEventButton",
-              center: "title",
-              right: "dayGridMonth,timeGridWeek,timeGridDay",
-            }}
-            events={events}
-            selectable={true}
-            select={handleDateSelect}
-            eventClick={handleEventClick}
-            eventContent={renderEventContent}
-            customButtons={{
-              addEventButton: {
-                text: "Add Event +",
-                click: openModal,
-              },
-            }}
-          />
-        </div>
-        <Modal
-          isOpen={isOpen}
-          onClose={closeModal}
-          className="max-w-[700px] p-6 lg:p-10"
-        >
-          <div className="flex flex-col px-2 overflow-y-auto custom-scrollbar">
-            <div>
-              <h5 className="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
-                {selectedEvent ? "Edit Event" : "Add Event"}
-              </h5>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Plan your next big moment: schedule or edit an event to stay on
-                track
-              </p>
-            </div>
-            <div className="mt-8">
-              <div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Event Title
-                  </label>
-                  <input
-                    id="event-title"
-                    type="text"
-                    value={eventTitle}
-                    onChange={(e) => setEventTitle(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-              <div className="mt-6">
-                <label className="block mb-4 text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Event Color
-                </label>
-                <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-                  {Object.entries(calendarsEvents).map(([key, value]) => (
-                    <div key={key} className="n-chk">
-                      <div
-                        className={`form-check form-check-${value} form-check-inline`}
-                      >
-                        <label
-                          className="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                          htmlFor={`modal${key}`}
-                        >
-                          <span className="relative">
-                            <input
-                              className="sr-only form-check-input"
-                              type="radio"
-                              name="event-level"
-                              value={key}
-                              id={`modal${key}`}
-                              checked={eventLevel === key}
-                              onChange={() => setEventLevel(key)}
-                            />
-                            <span className="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700">
-                              <span
-                                className={`h-2 w-2 rounded-full bg-white ${
-                                  eventLevel === key ? "block" : "hidden"
-                                }`}
-                              ></span>
-                            </span>
-                          </span>
-                          {key}
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      <PageMeta title="Interview Calendar" description="View and manage interviews and job offers" />
 
-              <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Enter Start Date
-                </label>
-                <div className="relative">
-                  <input
-                    id="event-start-date"
-                    type="date"
-                    value={eventStartDate}
-                    onChange={(e) => setEventStartDate(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
+    
 
-              <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Enter End Date
-                </label>
-                <div className="relative">
-                  <input
-                    id="event-end-date"
-                    type="date"
-                    value={eventEndDate}
-                    onChange={(e) => setEventEndDate(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 mt-6 modal-footer sm:justify-end">
-              <button
-                onClick={closeModal}
-                type="button"
-                className="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleAddOrUpdateEvent}
-                type="button"
-                className="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
-              >
-                {selectedEvent ? "Update Changes" : "Add Event"}
-              </button>
-            </div>
-          </div>
-        </Modal>
+      <div className="rounded-2xl border bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="rounded-2xl border bg-white dark:border-gray-800 dark:bg-white/[0.03] p-4">
+  <div className="flex items-center justify-between mb-4">
+
+    {/* 🔽 Job Offer Filter */}
+    <select
+      id="jobFilter"
+      value={selectedJobIdFilter ?? ""}
+      onChange={(e) => {
+        const val = e.target.value;
+        setSelectedJobIdFilter(val ? Number(val) : null);
+      }}
+      className="border px-3 py-2 rounded"
+    >
+      <option value="">All Job Offers</option>
+      {jobOffers.map((job) => (
+        <option key={job.id} value={job.id}>
+          {job.title}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div className="custom-calendar">
+    <FullCalendar
+      ref={calendarRef}
+      plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+      initialView="dayGridMonth"
+      headerToolbar={{
+        left: "prev,next",
+        center: "title",
+        right: "dayGridMonth,timeGridWeek,timeGridDay",
+      }}
+      events={events.filter((event) => {
+        if (selectedJobIdFilter === null) return true;
+        if (event.extendedProps.eventType === "jobOffer") return true;
+        return event.extendedProps.jobId === selectedJobIdFilter;
+      })}
+      selectable={true}
+      select={handleDateSelect}
+      eventClick={handleEventClick}
+      eventContent={renderEventContent}
+    />
+  </div>
+</div>
+
       </div>
+
+<Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] p-6 lg:p-10 overflow-visible">
+  <div className="flex flex-col px-2 custom-scrollbar z-[9999]">
+          <h5 className="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
+            {selectedEvent ? "Edit Interview" : "Add Interview"}
+          </h5>
+
+    <input
+  type="text"
+  value={eventTitle}
+  readOnly
+  placeholder="Interview Title"
+  className="my-2 w-full border px-3 py-2 rounded bg-gray-100 cursor-not-allowed"
+/>
+      <label className="mt-2">Start Date & Time:</label>
+<DatePicker
+  id="start-date"
+  mode="single"
+  defaultDate={eventStartDate ? new Date(eventStartDate) : undefined}
+  onChange={(selectedDates) => {
+    if (selectedDates.length) {
+      const selectedDate = selectedDates[0];
+      const now = new Date();
+
+      if (selectedDate < now) {
+        alert("⚠️ La date sélectionnée doit être dans le futur.");
+        return;
+      }
+
+      setEventStartDate(selectedDate.toISOString());
+    } else {
+      setEventStartDate("");
+    }
+  }}
+  placeholder="Select start date and time"
+/>
+
+
+
+
+          <button
+            onClick={handleAddOrUpdateEvent}
+            className="mt-4 bg-brand-500 text-white px-4 py-2 rounded hover:bg-brand-600"
+          >
+            {selectedEvent ? "Update" : "Add"}
+          </button>
+        </div>
+      </Modal>
     </>
   );
 };
@@ -271,9 +324,7 @@ const Calendar: React.FC = () => {
 const renderEventContent = (eventInfo: any) => {
   const colorClass = `fc-bg-${eventInfo.event.extendedProps.calendar.toLowerCase()}`;
   return (
-    <div
-      className={`event-fc-color flex fc-event-main ${colorClass} p-1 rounded-sm`}
-    >
+    <div className={`event-fc-color flex fc-event-main ${colorClass} p-1 rounded-sm`}>
       <div className="fc-daygrid-event-dot"></div>
       <div className="fc-event-time">{eventInfo.timeText}</div>
       <div className="fc-event-title">{eventInfo.event.title}</div>

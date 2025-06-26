@@ -5,6 +5,8 @@ import MonthlyTarget from "../../components/ecommerce/MonthlyTarget";
 import RecentOrders from "../../components/ecommerce/RecentOrders";
 import DemographicCard from "../../components/ecommerce/DemographicCard";
 import PageMeta from "../../components/common/PageMeta";
+import TopSkillsChart from "../../components/ecommerce/TopSkillsChart";
+import StatisticsChartboth from "../../components/ecommerce/StatisticsChartboth";
 
 export default function Home() {
   return (
@@ -14,27 +16,28 @@ export default function Home() {
         description="This is React.js Ecommerce Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
       />
       <div className="grid grid-cols-12 gap-4 md:gap-6">
-        <div className="col-span-12 space-y-6 xl:col-span-7">
+              <div className="col-span-12">
           <EcommerceMetrics />
+        </div>
+        <div className="col-span-12 space-y-6 xl:col-span-7">
 
           <MonthlySalesChart />
-        </div>
-
-        <div className="col-span-12 xl:col-span-5">
-          <MonthlyTarget />
-        </div>
-
-        <div className="col-span-12">
           <StatisticsChart />
+
         </div>
 
         <div className="col-span-12 xl:col-span-5">
-          <DemographicCard />
+                    <MonthlyTarget />
+
+          <TopSkillsChart />
+
         </div>
 
-        <div className="col-span-12 xl:col-span-7">
-          <RecentOrders />
+  <div className="col-span-12">
+          <StatisticsChartboth />
         </div>
+        
+  
       </div>
     </>
   );

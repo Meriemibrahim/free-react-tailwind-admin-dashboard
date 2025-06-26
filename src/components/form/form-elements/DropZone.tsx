@@ -1,76 +1,202 @@
+import React, { useEffect, useRef, useState } from "react";
 import ComponentCard from "../../common/ComponentCard";
 import { useDropzone } from "react-dropzone";
-// import Dropzone from "react-dropzone";
+import { OcrService } from "../../../services";
+import { Client } from "@stomp/stompjs";
+import SockJS from 'sockjs-client/dist/sockjs';
+interface Props {
+  onUploadSuccess?: () => void;
+}
 
-const DropzoneComponent: React.FC = () => {
+
+export default function DropzoneComponent({ onUploadSuccess }: Props) {
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileSteps, setFileSteps] = useState<Record<string, number>>({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [overallProgress, setOverallProgress] = useState(0);
+
+  const progressByFileRef = useRef<Map<string, number>>(new Map());
+ 
+
   const onDrop = (acceptedFiles: File[]) => {
-    console.log("Files dropped:", acceptedFiles);
-    // Handle file uploads here
+    setSelectedFiles((prev) => [...prev, ...acceptedFiles]);
   };
+
+  const handleRemoveFile = (fileName: string) => {
+    setSelectedFiles((files) => files.filter((file) => file.name !== fileName));
+  };
+
+  const handleFileUpload = async (selectedFile: File) => {
+    const formData = new FormData();
+    formData.append("files", selectedFile);
+
+    setIsUploading(true);
+    try {
+      const data = await OcrService.uploadCvs(formData);
+      console.log("File uploaded and processed successfully", data);
+            if (onUploadSuccess) onUploadSuccess(); // 🔁 notifier parent
+
+    } catch (error) {
+      console.error("Error uploading file", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    setIsComplete(false);
+
+    const initSteps: Record<string, number> = {};
+    selectedFiles.forEach((file) => (initSteps[file.name] = 0));
+    setFileSteps(initSteps);
+
+    for (const file of selectedFiles) {
+      await handleFileUpload(file);
+    }
+    const allDone = Array.from(progressByFileRef.current.values()).every(p => p === 100);
+    if (allDone) {
+      setIsAnalyzing(false);
+      setIsComplete(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAnalyzing) return;
+
+    const socket = new SockJS('http://localhost:8089/ws');
+    const stompClient = new Client({
+      webSocketFactory: () => socket,
+      debug: (str) => console.log(str),
+      onConnect: () => {
+        stompClient.subscribe('/topic/progress', (message) => {
+          const data = JSON.parse(message.body);
+          if (data.fileName && typeof data.progress === 'number') {
+            progressByFileRef.current.set(data.fileName, data.progress);
+
+            const progressValues = Array.from(progressByFileRef.current.values());
+            const totalFiles = progressValues.length;
+            const computedOverall = progressValues.reduce((sum, p) => sum + p, 0) / totalFiles;
+
+            setOverallProgress(Math.round(computedOverall));
+          }
+        });
+      },
+      onStompError: (error) => {
+        console.error("STOMP Error:", error);
+      }
+    });
+
+    stompClient.activate();
+
+    return () => {
+      stompClient.deactivate();
+    };
+  }, [isAnalyzing]);
+
+
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       "image/png": [],
       "image/jpeg": [],
-      "image/webp": [],
-      "image/svg+xml": [],
+      "application/pdf": [],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
     },
   });
+
   return (
     <ComponentCard title="Dropzone">
-      <div className="transition border border-gray-300 border-dashed cursor-pointer dark:hover:border-brand-500 dark:border-gray-700 rounded-xl hover:border-brand-500">
-        <form
-          {...getRootProps()}
-          className={`dropzone rounded-xl   border-dashed border-gray-300 p-7 lg:p-10
-        ${
-          isDragActive
-            ? "border-brand-500 bg-gray-100 dark:bg-gray-800"
-            : "border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
-        }
-      `}
-          id="demo-upload"
-        >
-          {/* Hidden Input */}
-          <input {...getInputProps()} />
+      {!isAnalyzing && !isComplete && (
+        <div className="border border-dashed border-gray-300 p-7 rounded-xl cursor-pointer">
+          <form {...getRootProps()} className="text-center">
+            <input {...getInputProps()} />
+            <p className="text-gray-800 dark:text-white mb-3 font-semibold text-lg">
+              {isDragActive ? "Drop files here..." : "Drag & Drop or Browse files"}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Supported: PNG, JPEG, PDF, DOCX
+            </p>
+          </form>
+        </div>
+      )}
 
-          <div className="dz-message flex flex-col items-center m-0!">
-            {/* Icon Container */}
-            <div className="mb-[22px] flex justify-center">
-              <div className="flex h-[68px] w-[68px]  items-center justify-center rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                <svg
-                  className="fill-current"
-                  width="29"
-                  height="28"
-                  viewBox="0 0 29 28"
-                  xmlns="http://www.w3.org/2000/svg"
+      {selectedFiles.length > 0 && !isAnalyzing && !isComplete && (
+        <div className="mt-4">
+          <ul className="mb-4">
+            {selectedFiles.map((file) => (
+              <li key={file.name} className="flex justify-between items-center mb-2">
+                <span>{file.name}</span>
+                <button
+                  onClick={() => handleRemoveFile(file.name)}
+                  className="text-red-500 hover:text-red-700"
                 >
-                  <path
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                    d="M14.5019 3.91699C14.2852 3.91699 14.0899 4.00891 13.953 4.15589L8.57363 9.53186C8.28065 9.82466 8.2805 10.2995 8.5733 10.5925C8.8661 10.8855 9.34097 10.8857 9.63396 10.5929L13.7519 6.47752V18.667C13.7519 19.0812 14.0877 19.417 14.5019 19.417C14.9161 19.417 15.2519 19.0812 15.2519 18.667V6.48234L19.3653 10.5929C19.6583 10.8857 20.1332 10.8855 20.426 10.5925C20.7188 10.2995 20.7186 9.82463 20.4256 9.53184L15.0838 4.19378C14.9463 4.02488 14.7367 3.91699 14.5019 3.91699ZM5.91626 18.667C5.91626 18.2528 5.58047 17.917 5.16626 17.917C4.75205 17.917 4.41626 18.2528 4.41626 18.667V21.8337C4.41626 23.0763 5.42362 24.0837 6.66626 24.0837H22.3339C23.5766 24.0837 24.5839 23.0763 24.5839 21.8337V18.667C24.5839 18.2528 24.2482 17.917 23.8339 17.917C23.4197 17.917 23.0839 18.2528 23.0839 18.667V21.8337C23.0839 22.2479 22.7482 22.5837 22.3339 22.5837H6.66626C6.25205 22.5837 5.91626 22.2479 5.91626 21.8337V18.667Z"
-                  />
-                </svg>
-              </div>
-            </div>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={handleAnalyze}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md"
+            disabled={isUploading}
+          >
+            {isUploading ? "Uploading..." : "Analyze"}
+          </button>
+        </div>
+      )}
 
-            {/* Text Content */}
-            <h4 className="mb-3 font-semibold text-gray-800 text-theme-xl dark:text-white/90">
-              {isDragActive ? "Drop Files Here" : "Drag & Drop Files Here"}
-            </h4>
-
-            <span className=" text-center mb-5 block w-full max-w-[290px] text-sm text-gray-700 dark:text-gray-400">
-              Drag and drop your PNG, JPG, WebP, SVG images here or browse
-            </span>
-
-            <span className="font-medium underline text-theme-sm text-brand-500">
-              Browse File
+      {isAnalyzing && (
+        <div className="flex flex-col items-center justify-center py-10">
+          <div className="relative w-32 h-32">
+            <svg className="absolute top-0 left-0" viewBox="0 0 36 36">
+              <path
+                className="text-gray-300"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <path
+                className="text-blue-500"
+                strokeDasharray={`${overallProgress}, 100`}
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-xl font-bold">
+              {overallProgress}%
             </span>
           </div>
-        </form>
-      </div>
+          <p className="mt-4 text-gray-700 dark:text-white font-medium">
+            Analyzing files...
+          </p>
+        </div>
+      )}
+
+      {isComplete && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <h2 className="text-3xl font-bold text-green-600 mb-4">Complete!</h2>
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded-md"
+            onClick={() => {
+              setSelectedFiles([]);
+              setFileSteps({});
+              setIsComplete(false);
+              setOverallProgress(0);
+              progressByFileRef.current.clear();
+            }}
+          >
+            Upload More Files
+          </button>
+        </div>
+      )}
     </ComponentCard>
   );
 };
 
-export default DropzoneComponent;

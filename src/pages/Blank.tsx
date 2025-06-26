@@ -1,25 +1,77 @@
-import PageBreadcrumb from "../components/common/PageBreadCrumb";
-import PageMeta from "../components/common/PageMeta";
+import { useEffect, useState } from "react";
 
-export default function Blank() {
+type Job = {
+  id: number;
+  title: string;
+  educationLevel: string;
+  minExperienceYears: number;
+};
+
+export default function ThreeColumnJobGrid() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/jobs")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch job data.");
+        return res.json();
+      })
+      .then((data) => {
+        setJobs(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-4 text-blue-500 font-medium">Loading jobs...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-red-500 font-semibold mt-10">
+        {error}
+      </div>
+    );
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div className="text-center text-gray-500 font-medium mt-10">
+        No job posts available at the moment.
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageMeta
-        title="React.js Blank Dashboard | TailAdmin - Next.js Admin Dashboard Template"
-        description="This is React.js Blank Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
-      />
-      <PageBreadcrumb pageTitle="Blank Page" />
-      <div className="min-h-screen rounded-2xl border border-gray-200 bg-white px-5 py-7 dark:border-gray-800 dark:bg-white/[0.03] xl:px-10 xl:py-12">
-        <div className="mx-auto w-full max-w-[630px] text-center">
-          <h3 className="mb-4 font-semibold text-gray-800 text-theme-xl dark:text-white/90 sm:text-2xl">
-            Card Title Here
-          </h3>
-
-          <p className="text-sm text-gray-500 dark:text-gray-400 sm:text-base">
-            Start putting content on grids or panels, you can also use different
-            combinations of grids.Please check out the dashboard and other pages
-          </p>
-        </div>
+    <div className="p-6">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {jobs.map((job) => (
+          <div
+            key={job.id}
+            className="border border-gray-200 rounded-xl dark:border-gray-800 p-4 shadow-md bg-white dark:bg-gray-900"
+          >
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+              {job.title}
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+              Education: {job.educationLevel}
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Experience: {job.minExperienceYears}+ years
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
+  FileIcon,
   GridIcon,
   HorizontaLDots,
   ListIcon,
@@ -14,6 +15,7 @@ import {
   PlugInIcon,
   TableIcon,
   UserCircleIcon,
+  UserIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
@@ -28,37 +30,52 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/", pro: false }],
+    name: "Tableau de bord",
+    path: "/",
   },
   {
     icon: <CalenderIcon />,
-    name: "Calendar",
+    name: "Calendrier d'Entretein ",
     path: "/calendar",
   },
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
+  //{
+    //icon: <UserCircleIcon />,
+  //  name: "User Profile",
+  //  path: "/profile",
+  //},
+ // {
+   // name: "Forms",
+   // icon: <ListIcon />,
+   // subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
+  //},
+    {
+    name: "fiches de Postes",
+    icon: <FileIcon />,
+    
+      path: "/FicheListPage",
   },
   {
-    name: "Forms",
+    name: "Offres",
     icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
+     path: "/Jobs",
   },
   {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "Blank Page", path: "/blank", pro: false },
-      { name: "404 Error", path: "/error-404", pro: false },
+    name: "Candidats",
+    icon: <UserIcon />,
+    subItems: [{ name: "Liste De Candidats", path: "/basic-tables", pro: false },
+      { name: "Compétences", path: "/skills", pro: false },
+      { name: "Certifications", path: "/certifications", pro: false },
     ],
+    
   },
+ // {
+  //  name: "Pages",
+   // icon: <PageIcon />,
+   // subItems: [
+   //   { name: "Blank Page", path: "/blank", pro: false },
+   //   { name: "404 Error", path: "/error-404", pro: false },
+   // ],
+ // },
 ];
 
 const othersItems: NavItem[] = [
@@ -308,14 +325,14 @@ const AppSidebar: React.FC = () => {
             <>
               <img
                 className="dark:hidden"
-                src="/images/logo/logo.svg"
+                src="/images/logo/logo.png"
                 alt="Logo"
                 width={150}
                 height={40}
               />
               <img
                 className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                src="/images/logo/logo-dark.png"
                 alt="Logo"
                 width={150}
                 height={40}
@@ -323,7 +340,7 @@ const AppSidebar: React.FC = () => {
             </>
           ) : (
             <img
-              src="/images/logo/logo-icon.svg"
+              src="/images/logo/logo-icon.png"
               alt="Logo"
               width={32}
               height={32}
@@ -350,7 +367,7 @@ const AppSidebar: React.FC = () => {
               </h2>
               {renderMenuItems(navItems, "main")}
             </div>
-            <div className="">
+            {<div className="">
               <h2
                 className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
                   !isExpanded && !isHovered
@@ -364,11 +381,10 @@ const AppSidebar: React.FC = () => {
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(othersItems, "others")}
-            </div>
+               {renderMenuItems(othersItems, "others")}
+            </div>}
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );

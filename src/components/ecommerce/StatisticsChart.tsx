@@ -1,137 +1,132 @@
+import { useEffect, useState } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
+import axios from "axios";
 import ChartTab from "../common/ChartTab";
+import { dashboardService } from "../../services/dashboardService";
 
 export default function StatisticsChart() {
-  const options: ApexOptions = {
-    legend: {
-      show: false, // Hide legend
-      position: "top",
-      horizontalAlign: "left",
-    },
-    colors: ["#465FFF", "#9CB9FF"], // Define line colors
+  // Données offres par mois
+  const [offersPerMonth, setOffersPerMonth] = useState<number[]>([]);
+  // Données entretiens par offre
+  const [interviewTitles, setInterviewTitles] = useState<string[]>([]);
+  const [interviewCounts, setInterviewCounts] = useState<number[]>([]);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const jobsData = await dashboardService.getJobsPerMonth();
+        const months = [
+          "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        ];
+        const counts = months.map((m) => jobsData[m] || 0);
+        setOffersPerMonth(counts);
+
+        const interviewsData = await dashboardService.getInterviewsPerOffer();
+        setInterviewTitles(interviewsData.map((d) => d.title));
+        setInterviewCounts(interviewsData.map((d) => d.count));
+      } catch (error) {
+        console.error("Erreur lors du chargement des données:", error);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  // Options pour offres par mois (ligne)
+  const optionsOffers: ApexOptions = {
     chart: {
       fontFamily: "Outfit, sans-serif",
+      type: "line",
       height: 310,
-      type: "line", // Set the chart type to 'line'
-      toolbar: {
-        show: false, // Hide chart toolbar
-      },
+      toolbar: { show: false },
     },
-    stroke: {
-      curve: "straight", // Define the line style (straight, smooth, or step)
-      width: [2, 2], // Line width for each dataset
-    },
-
+    colors: ["#465FFF"],
+    stroke: { curve: "smooth", width: 2 },
     fill: {
       type: "gradient",
-      gradient: {
-        opacityFrom: 0.55,
-        opacityTo: 0,
-      },
+      gradient: { opacityFrom: 0.5, opacityTo: 0 },
     },
-    markers: {
-      size: 0, // Size of the marker points
-      strokeColors: "#fff", // Marker border color
-      strokeWidth: 2,
-      hover: {
-        size: 6, // Marker size on hover
-      },
+    markers: { size: 4 },
+    xaxis: {
+      categories: [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ],
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+      tooltip: { enabled: false },
     },
-    grid: {
-      xaxis: {
-        lines: {
-          show: false, // Hide grid lines on x-axis
-        },
-      },
-      yaxis: {
-        lines: {
-          show: true, // Show grid lines on y-axis
-        },
+    yaxis: {
+      labels: { style: { fontSize: "12px", colors: ["#6B7280"] } },
+      title: { text: "Offres publiées" },
+    },
+    grid: { yaxis: { lines: { show: true } } },
+    dataLabels: { enabled: false },
+    tooltip: { enabled: true },
+    legend: { show: false },
+  };
+
+  const seriesOffers = [
+    { name: "Offres publiées", data: offersPerMonth }
+  ];
+
+  // Options pour entretiens par offre (barres)
+  const optionsInterviews: ApexOptions = {
+    chart: {
+      type: "bar",
+      height: 400,
+      fontFamily: "Outfit, sans-serif",
+      toolbar: { show: false },
+    },
+    colors: ["#00b894"],
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        columnWidth: "50%",
+        borderRadius: 4,
       },
     },
     dataLabels: {
-      enabled: false, // Disable data labels
-    },
-    tooltip: {
-      enabled: true, // Enable tooltip
-      x: {
-        format: "dd MMM yyyy", // Format for x-axis tooltip
-      },
+      enabled: true,
+      style: { fontSize: "12px", colors: ["#333"] },
     },
     xaxis: {
-      type: "category", // Category-based x-axis
-      categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ],
-      axisBorder: {
-        show: false, // Hide x-axis border
-      },
-      axisTicks: {
-        show: false, // Hide x-axis ticks
-      },
-      tooltip: {
-        enabled: false, // Disable tooltip for x-axis points
-      },
+      categories: interviewTitles,
+      labels: { rotate: -45, style: { fontSize: "12px" } },
+      title: { text: "Offres" },
     },
     yaxis: {
-      labels: {
-        style: {
-          fontSize: "12px", // Adjust font size for y-axis labels
-          colors: ["#6B7280"], // Color of the labels
-        },
-      },
-      title: {
-        text: "", // Remove y-axis title
-        style: {
-          fontSize: "0px",
-        },
-      },
+      title: { text: "Nombre d'entretiens" },
     },
+    tooltip: {
+      y: { formatter: (val: number) => `${val} entretiens` },
+    },
+    grid: { yaxis: { lines: { show: true } } },
   };
 
-  const series = [
-    {
-      name: "Sales",
-      data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 210, 240, 235],
-    },
-    {
-      name: "Revenue",
-      data: [40, 30, 50, 40, 55, 40, 70, 100, 110, 120, 150, 140],
-    },
+  const seriesInterviews = [
+    { name: "Entretiens", data: interviewCounts }
   ];
+
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
-      <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
-        <div className="w-full">
+    <div className="space-y-12">
+      {/* Graphique offres par mois */}
+      <div className="rounded-2xl border border-gray-200 bg-white px-5 py-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
+        <div className="flex flex-col gap-2 mb-6">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-            Statistics
+            Offres publiées par mois
           </h3>
-          <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            Target you’ve set for each month
+          <p className="text-gray-500 text-theme-sm dark:text-gray-400">
+            Évolution du volume de publication mensuelle
           </p>
         </div>
-        <div className="flex items-start w-full gap-3 sm:justify-end">
-          <ChartTab />
-        </div>
+        <Chart options={optionsOffers} series={seriesOffers} type="line" height={310} />
       </div>
 
-      <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="min-w-[1000px] xl:min-w-full">
-          <Chart options={options} series={series} type="area" height={310} />
-        </div>
-      </div>
+      {/* Graphique entretiens par offre */}
+    
     </div>
   );
 }
